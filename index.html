@@ -740,12 +740,12 @@
             </div>
             
             <div class="nav-tabs">
-                <button class="nav-tab active" onclick="switchTab('admin', 'tokens')">Token管理</button>
-                <button class="nav-tab" onclick="switchTab('admin', 'allocation')">Token分配</button>
-                <button class="nav-tab" onclick="switchTab('admin', 'members')">成员管理</button>
-                <button class="nav-tab" onclick="switchTab('admin', 'history')">使用历史</button>
-                <button class="nav-tab" onclick="switchTab('admin', 'analysis')">数据分析</button>
-                <button class="nav-tab" onclick="switchTab('admin', 'settings')">⚙️ 设置</button>
+                <button class="nav-tab active" onclick="switchTab('admin', 'tokens', event)">Token管理</button>
+                <button class="nav-tab" onclick="switchTab('admin', 'allocation', event)">Token分配</button>
+                <button class="nav-tab" onclick="switchTab('admin', 'members', event)">成员管理</button>
+                <button class="nav-tab" onclick="switchTab('admin', 'history', event)">使用历史</button>
+                <button class="nav-tab" onclick="switchTab('admin', 'analysis', event)">数据分析</button>
+                <button class="nav-tab" onclick="switchTab('admin', 'settings', event)">⚙️ 设置</button>
                 <button class="nav-tab" onclick="openChangePasswordModal()">修改密码</button>
             </div>
             
@@ -1674,81 +1674,17 @@
         
         const DB_CONNECTION_CONFIG = {
             primary: {
-                url: 'https://qnfhqwrjwgdgmejzczqx.supabase.co',  // Supabase Project URL
+                url: 'https://qnfhqwrjwgdgmejzczqx.supabase.co',
                 anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZmhxd3Jqd2dkZ21lanpjenF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NzY4MjksImV4cCI6MjA5MDA1MjgyOX0.1ybjcHXdBM0mjk2spqASDv_i6cXl0b9jQSQJ3r-iZuY',
                 name: '数据库',
                 enabled: true
-            },
-            timeouts: {
-                quick: 8000,
-                normal: 15000,
-                heartbeat: 5000
-            },
-            retry: {
-                maxAttempts: 5,
-                quickAttempts: 2,
-                backoffBase: 1000,
-                backoffMax: 10000
-            },
-            heartbeat: {
-                enabled: true,
-                interval: 15000
             }
         };
         
         let supabase = null;
         let dbConnected = false;
-        let reconnectTimer = null;
-        let isConnecting = false;
-        let connectionAttempts = 0;
         let currentDbConfig = null;
         let USE_LOCAL_STORAGE_FLAG = false;
-        
-        const FAST_FAIL_TIMEOUT = DB_CONNECTION_CONFIG.timeouts.quick;
-        const MAX_QUICK_ATTEMPTS = DB_CONNECTION_CONFIG.retry.quickAttempts;
-        
-        async function testDatabaseConnection(config) {
-            if (!config || !config.enabled) return false;
-            
-            try {
-                const testSupabase = window.supabase.createClient(config.url, config.anonKey, {
-                    db: { schema: 'public' },
-                    global: {
-                        headers: {
-                            'x-client-info': 'token-distribution-system',
-                            'x-priority-mode': 'database-first'
-                        }
-                    },
-                    auth: {
-                        persistSession: false,
-                        autoRefreshToken: false
-                    }
-                });
-                
-                const startTime = performance.now();
-                
-                try {
-                    const { data, error } = await Promise.race([
-                        testSupabase.auth.getSession(),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('连接超时')), FAST_FAIL_TIMEOUT)
-                        )
-                    ]);
-                    
-                    const latency = performance.now() - startTime;
-                    console.log(`✅ 数据库 ${config.name} 连接成功，延迟: ${Math.round(latency)}ms`);
-                    return { success: true, latency: latency };
-                    
-                } catch (queryError) {
-                    console.warn(`⚠️ 数据库 ${config.name} 权限限制，但连接正常`);
-                    return { success: true, latency: performance.now() - startTime };
-                }
-                
-            } catch (error) {
-                console.error(`❌ 数据库 ${config.name} 连接失败:`, error.message);
-                return { success: false, error: error.message };
-            }
-        }
         
         function updateDbStatus(status, message, dbInfo = '') {
             const dbStatusDot = document.getElementById('dbStatusDot');
@@ -1779,6 +1715,31 @@
         let currentUser = null;
         let currentMarkToken = null;
         let recentTokensData = []; // 存储最近申请的token
+        
+        // 10分钟无操作自动退出
+        let idleTimeout = null;
+        const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10分钟
+        
+        function resetIdleTimer() {
+            if (idleTimeout) {
+                clearTimeout(idleTimeout);
+            }
+            if (currentUser) {
+                idleTimeout = setTimeout(async () => {
+                    console.log('⏰ 10分钟无操作，自动退出登录');
+                    alert('由于长时间未操作，已自动退出登录');
+                    await logout();
+                }, IDLE_TIMEOUT_MS);
+            }
+        }
+        
+        function startIdleMonitor() {
+            // 监听用户活动
+            ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'].forEach(event => {
+                document.addEventListener(event, resetIdleTimer, { passive: true });
+            });
+            resetIdleTimer();
+        }
         
         // Token分页状态管理
         let paginationState = {
@@ -1833,6 +1794,11 @@
             lastLoadTime: 0
         };
         
+        // 设置缓存（5分钟有效期）
+        let settingsCache = null;
+        let settingsCacheTime = 0;
+        const SETTINGS_CACHE_TTL = 5 * 60 * 1000; // 5分钟
+        
         async function initializeDatabase() {
             if (USE_LOCAL_STORAGE) {
                 console.log('🔄 使用本地优先模式');
@@ -1840,14 +1806,6 @@
                 enableLocalStorageMode();
                 return;
             }
-            
-            if (isConnecting) return;
-            isConnecting = true;
-            connectionAttempts++;
-            
-            const maxAttempts = DB_CONNECTION_CONFIG.retry.maxAttempts;
-            console.log(`🔄 开始尝试连接数据库... (第${connectionAttempts}次尝试)`);
-            updateDbStatus('connecting', '正在连接数据库...', `尝试 ${connectionAttempts}/${maxAttempts}`);
             
             try {
                 if (typeof window.supabase === 'undefined') {
@@ -1866,143 +1824,31 @@
                     db: { schema: 'public' },
                     global: {
                         headers: {
-                            'x-client-info': 'token-distribution-system',
-                            'x-connection-mode': 'optimized'
+                            'x-client-info': 'token-distribution-system'
                         }
                     },
                     auth: {
-                        persistSession: false,
-                        autoRefreshToken: false
+                        persistSession: true,
+                        autoRefreshToken: true
                     }
                 });
                 
-                const timeout = connectionAttempts <= DB_CONNECTION_CONFIG.retry.quickAttempts ? 
-                    DB_CONNECTION_CONFIG.timeouts.quick : 
-                    DB_CONNECTION_CONFIG.timeouts.normal;
-                
-                const testStartTime = performance.now();
-                
-                try {
-                    const { data, error } = await Promise.race([
-                        supabase.auth.getSession(),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('连接超时')), timeout)
-                        )
-                    ]);
-                    
-                    if (error) throw error;
-                    
-                    const latency = performance.now() - testStartTime;
-                    updateDbStatus('connected', '数据库已连接', `延迟:${Math.round(latency)}ms`);
-                    console.log(`✅ 数据库连接成功 - ${currentDbConfig.name}，延迟: ${Math.round(latency)}ms`);
-                    
-                    connectionAttempts = 0;
-                    
-                    if (reconnectTimer) {
-                        clearInterval(reconnectTimer);
-                        reconnectTimer = null;
-                    }
-                    
-                    if (DB_CONNECTION_CONFIG.heartbeat.enabled) {
-                        const heartbeatInterval = DB_CONNECTION_CONFIG.heartbeat.interval;
-                        const heartbeatTimeout = DB_CONNECTION_CONFIG.timeouts.heartbeat;
-                        
-                        reconnectTimer = setInterval(async () => {
-                            try {
-                                const { error } = await Promise.race([
-                                    supabase.auth.getSession(),
-                                    new Promise((_, reject) => 
-                                        setTimeout(() => reject(new Error('心跳超时')), heartbeatTimeout)
-                                    )
-                                ]);
-                                
-                                if (error) throw error;
-                                console.log('💓 心跳检测正常');
-                                
-                            } catch (error) {
-                                console.warn('⚠️ 心跳检测失败:', error);
-                                if (dbConnected) {
-                                    updateDbStatus('connecting', '连接不稳定', '正在重新连接...');
-                                    await attemptReconnect();
-                                }
-                            }
-                        }, heartbeatInterval);
-                    }
-                    
-                } catch (testError) {
-                    console.warn('⚠️ 数据库连接测试失败:', testError.message);
-                    throw new Error(testError.message || '数据库连接失败');
-                }
+                dbConnected = true;
+                updateDbStatus('connected', '数据库已连接', '在线模式');
+                console.log(`✅ 数据库连接成功 - ${currentDbConfig.name}`);
                 
             } catch (error) {
                 console.error('❌ 数据库连接失败:', error.message);
-                
-                const maxAttempts = DB_CONNECTION_CONFIG.retry.maxAttempts;
-                
-                if (connectionAttempts >= maxAttempts) {
-                    console.log(`⚠️ 超过最大重试次数(${maxAttempts}次)，切换至本地存储模式`);
-                    updateDbStatus('disconnected', '本地存储模式', '数据库连接失败，已切换到本地存储');
-                    enableLocalStorageMode();
-                    connectionAttempts = 0;
-                    isConnecting = false;
-                    return;
-                }
-                
-                const backoffBase = DB_CONNECTION_CONFIG.retry.backoffBase;
-                const backoffMax = DB_CONNECTION_CONFIG.retry.backoffMax;
-                const backoffTime = Math.min(Math.pow(2, connectionAttempts) * backoffBase, backoffMax);
-                
-                updateDbStatus('connecting', '连接失败', `${backoffTime/1000}秒后重试 (${connectionAttempts}/${maxAttempts})`);
-                
-                console.log(`⏳ ${backoffTime/1000}秒后进行第${connectionAttempts + 1}次重试...`);
-                
-                if (reconnectTimer) {
-                    clearTimeout(reconnectTimer);
-                }
-                
-                reconnectTimer = setTimeout(() => {
-                    reconnectTimer = null;
-                    isConnecting = false;
-                    initializeDatabase();
-                }, backoffTime);
+                updateDbStatus('disconnected', '本地存储模式', '数据库连接失败');
+                enableLocalStorageMode();
             }
-            
-            isConnecting = false;
         }
         
         function enableLocalStorageMode() {
             console.log('🔄 启用本地存储模式');
-            dbConnected = true;
-            
-            if (reconnectTimer) {
-                clearInterval(reconnectTimer);
-                reconnectTimer = null;
-            }
-            
+            USE_LOCAL_STORAGE_FLAG = true;
+            dbConnected = false;
             initLocalStorage();
-            
-            reconnectTimer = setInterval(async () => {
-                try {
-                    console.log('🔄 检测数据库连接恢复...');
-                    
-                    const result = await testDatabaseConnection(DB_CONNECTION_CONFIG.primary);
-                    
-                    if (result.success && result.latency < DB_CONNECTION_CONFIG.timeouts.quick) {
-                        console.log('✅ 数据库连接已恢复，切换回在线模式');
-                        clearInterval(reconnectTimer);
-                        reconnectTimer = null;
-                        USE_LOCAL_STORAGE_FLAG = false;
-                        
-                        isConnecting = false;
-                        connectionAttempts = 0;
-                        await initializeDatabase();
-                    } else {
-                        console.log(`⏸️ 数据库仍未恢复，继续使用本地存储 (延迟: ${Math.round(result.latency)}ms)`);
-                    }
-                } catch (error) {
-                    console.log('⏸️ 数据库检测失败，继续使用本地存储:', error.message);
-                }
-            }, 60000);
         }
         
         function initLocalStorage() {
@@ -2031,98 +1877,6 @@
             if (!localStorage.getItem('adminPassword')) {
                 localStorage.setItem('adminPassword', 'admin321');
             }
-        }
-        
-        const maxConnectionAttempts = 10;
-        
-        async function attemptReconnect() {
-            if (isConnecting) return;
-            
-            console.log('🔄 尝试重新连接数据库...');
-            updateDbStatus('connecting', '正在重连...', `${currentDbConfig ? currentDbConfig.name : '搜索可用数据库'}`);
-            
-            try {
-                connectionAttempts++;
-                
-                if (connectionAttempts > maxConnectionAttempts) {
-                    console.log(`⚠️ 重连次数过多(${connectionAttempts})，切换至本地存储模式`);
-                    updateDbStatus('disconnected', '本地存储模式', '重连失败，已切换到本地存储');
-                    enableLocalStorageMode();
-                    connectionAttempts = 0;
-                    isConnecting = false;
-                    return;
-                }
-                
-                if (currentDbConfig) {
-                    supabase = window.supabase.createClient(currentDbConfig.url, currentDbConfig.anonKey, {
-                        db: { schema: 'public' },
-                        global: {
-                            headers: {
-                                'x-client-info': 'token-distribution-system',
-                                'x-reconnect-attempt': new Date().toISOString()
-                            }
-                        },
-                        auth: {
-                            persistSession: false,
-                            autoRefreshToken: false
-                        }
-                    });
-                    
-                    const { error } = await Promise.race([
-                        supabase.auth.getSession(),
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('重连超时')), FAST_FAIL_TIMEOUT)
-                        )
-                    ]);
-                    
-                    if (error) throw error;
-                    
-                    const latency = Math.round(performance.now());
-                    updateDbStatus('connected', '数据库已连接', `延迟:${latency}ms`);
-                    console.log(`✅ 重连成功 - ${currentDbConfig.name}`);
-                    
-                    connectionAttempts = 0;
-                    
-                    if (reconnectTimer) {
-                        clearInterval(reconnectTimer);
-                        reconnectTimer = null;
-                    }
-                    
-                    reconnectTimer = setInterval(async () => {
-                        try {
-                            const { error } = await Promise.race([
-                                supabase.auth.getSession(),
-                                new Promise((_, reject) => 
-                                    setTimeout(() => reject(new Error('心跳超时')), 5000)
-                                )
-                            ]);
-                            
-                            if (error) throw error;
-                            console.log('💓 心跳检测正常');
-                            
-                        } catch (error) {
-                            console.warn('⚠️ 心跳检测失败:', error);
-                            if (dbConnected) {
-                                updateDbStatus('connecting', '连接不稳定', '正在重新连接...');
-                                await attemptReconnect();
-                            }
-                        }
-                    }, 15000);
-                    
-                } else {
-                    throw new Error('无可用数据库配置');
-                }
-                
-            } catch (error) {
-                console.error('❌ 重连失败:', error.message);
-                isConnecting = false;
-                
-                setTimeout(() => {
-                    attemptReconnect();
-                }, 5000);
-            }
-            
-            isConnecting = false;
         }
         
         function generateId() {
@@ -2597,19 +2351,35 @@
             }
         }
         
+        // 分配规则缓存
+        let allocationsCache = null;
+        let allocationsCacheTime = 0;
+        const ALLOCATIONS_CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+
         async function getAllocations() {
+            // 检查缓存
+            const now = Date.now();
+            if (allocationsCache && (now - allocationsCacheTime) < ALLOCATIONS_CACHE_TTL) {
+                console.log('📊 使用缓存的分配规则');
+                return allocationsCache;
+            }
+
             if (!dbConnected) {
                 return JSON.parse(localStorage.getItem('allocations') || '{"global":{"period":7,"maxClaims":1,"claimAmount":10},"members":{}}');
             }
             
             try {
+                console.log('📊 从数据库获取分配规则...');
                 const { data, error } = await supabase
                     .from('config')
                     .select('value')
                     .eq('key', 'allocations');
                 
                 if (error) throw error;
-                return data && data.length > 0 ? JSON.parse(data[0].value) : { global: { period: 7, maxClaims: 1, claimAmount: 10 }, members: {} };
+                const result = data && data.length > 0 ? JSON.parse(data[0].value) : { global: { period: 7, maxClaims: 1, claimAmount: 10 }, members: {} };
+                allocationsCache = result;
+                allocationsCacheTime = now;
+                return result;
             } catch (error) {
                 console.error('获取分配规则失败:', error);
                 return { global: { period: 7, maxClaims: 1, claimAmount: 10 }, members: {} };
@@ -2641,6 +2411,9 @@
                         .insert({ key: 'allocations', value: JSON.stringify(allocations) });
                     if (error) throw error;
                 }
+                // 清除缓存，下次获取最新数据
+                allocationsCache = null;
+                console.log('📊 分配规则保存成功，缓存已清除');
                 return true;
             } catch (error) {
                 console.error('保存分配规则失败:', error);
@@ -2981,20 +2754,45 @@
             return result.data;
         }
         
+        // 全量数据缓存（用于统计和下拉菜单）
+        let allTokensCache = null;
+        let allTokensCacheTime = 0;
+        let allMembersCache = null;
+        let allMembersCacheTime = 0;
+        let allHistoryCache = null;
+        let allHistoryCacheTime = 0;
+        const FULL_DATA_CACHE_TTL = 2 * 60 * 1000; // 2分钟缓存
+
         // 保留getAllHistoryWithoutLimit用于特定场景
         async function getAllHistoryWithoutLimit() {
+            const now = Date.now();
+            if (allHistoryCache && (now - allHistoryCacheTime) < FULL_DATA_CACHE_TTL) {
+                console.log('📦 使用缓存的历史数据');
+                return allHistoryCache;
+            }
+            console.log('📦 从数据库获取全量历史数据...');
             const result = await getHistoryWithPagination({}, { page: 1, pageSize: 10000 });
-            return result.data;
+            allHistoryCache = result.data;
+            allHistoryCacheTime = now;
+            return allHistoryCache;
         }
 
         // 保留getAllTokensWithoutLimit用于特定场景(如加载所有tokens用于分配)
         async function getAllTokensWithoutLimit() {
+            // 检查缓存
+            const now = Date.now();
+            if (allTokensCache && (now - allTokensCacheTime) < FULL_DATA_CACHE_TTL) {
+                console.log('📦 使用缓存的Token数据');
+                return allTokensCache;
+            }
+
             // 分批获取,避免一次性加载过多数据
             if (!dbConnected) {
                 return JSON.parse(localStorage.getItem('tokens') || '[]');
             }
 
             try {
+                console.log('📦 从数据库获取全量Token数据...');
                 // 使用Supabase的分页能力,但获取更多数据
                 const { data, error } = await supabase
                     .from('tokens')
@@ -3003,20 +2801,115 @@
                     .limit(10000); // 设置合理的上限
 
                 if (error) throw error;
-                return data || [];
+                allTokensCache = data || [];
+                allTokensCacheTime = now;
+                return allTokensCache;
             } catch (error) {
                 console.error('获取Token列表失败:', error);
                 return [];
             }
         }
 
+        // 通过ID获取单个Token，避免加载全部数据
+        async function getTokenById(id) {
+            try {
+                console.log('🔍 getTokenById 查询:', id);
+                
+                // 5秒超时
+                const timeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('查询超时')), 5000)
+                );
+                
+                const query = supabase
+                    .from('tokens')
+                    .select('*')
+                    .eq('id', id)
+                    .limit(1);
+
+                const { data, error } = await Promise.race([query, timeout]);
+
+                if (error) {
+                    console.error('❌ getTokenById 错误:', error);
+                    return null;
+                }
+                const result = data && data.length > 0 ? data[0] : null;
+                console.log('✅ getTokenById 结果:', result);
+                return result;
+            } catch (error) {
+                console.error('❌ getTokenById 异常:', error.message || error);
+                return null;
+            }
+        }
+
+        // 获取可用的Token（unused和failed状态），用于分配
+        async function getAvailableTokens(limit = 100) {
+            if (!dbConnected) {
+                const tokens = JSON.parse(localStorage.getItem('tokens') || '[]');
+                const available = tokens.filter(t => t.status === 'unused' || t.status === 'failed');
+                return available.slice(0, limit);
+            }
+
+            try {
+                console.log('🔍 获取可用Token，限制:', limit);
+                const { data, error } = await supabase
+                    .from('tokens')
+                    .select('*')
+                    .or('status.eq.unused,status.eq.failed')
+                    .order('import_time', { ascending: true })
+                    .limit(limit);
+
+                if (error) {
+                    console.error('获取可用Token失败:', error);
+                    return [];
+                }
+                console.log('✅ 获取可用Token成功:', data?.length || 0, '个');
+                return data || [];
+            } catch (error) {
+                console.error('获取可用Token异常:', error);
+                return [];
+            }
+        }
+
+        // 统计可用Token数量（不加载全部数据）
+        async function countAvailableTokens() {
+            if (!dbConnected) {
+                const tokens = JSON.parse(localStorage.getItem('tokens') || '[]');
+                const unused = tokens.filter(t => t.status === 'unused').length;
+                const failed = tokens.filter(t => t.status === 'failed').length;
+                return { unused, failed, total: unused + failed };
+            }
+
+            try {
+                const [unusedResult, failedResult] = await Promise.all([
+                    supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('status', 'unused'),
+                    supabase.from('tokens').select('id', { count: 'exact', head: true }).eq('status', 'failed')
+                ]);
+                
+                const unused = unusedResult.count || 0;
+                const failed = failedResult.count || 0;
+                console.log('📊 Token统计: unused=', unused, ', failed=', failed);
+                return { unused, failed, total: unused + failed };
+            } catch (error) {
+                console.error('统计Token失败:', error);
+                return { unused: 0, failed: 0, total: 0 };
+            }
+        }
+
         // 保留getAllMembersWithoutLimit用于特定场景
         async function getAllMembersWithoutLimit() {
+            // 检查缓存
+            const now = Date.now();
+            if (allMembersCache && (now - allMembersCacheTime) < FULL_DATA_CACHE_TTL) {
+                console.log('📦 使用缓存的成员数据');
+                return allMembersCache;
+            }
+
             if (!dbConnected) {
                 return JSON.parse(localStorage.getItem('members') || '[]');
             }
 
             try {
+                console.log('📦 从数据库获取全量成员数据...');
                 const { data, error } = await supabase
                     .from('members')
                     .select('*')
@@ -3024,7 +2917,9 @@
                     .limit(10000); // 设置合理的上限
 
                 if (error) throw error;
-                return data || [];
+                allMembersCache = data || [];
+                allMembersCacheTime = now;
+                return allMembersCache;
             } catch (error) {
                 console.error('获取成员列表失败:', error);
                 return [];
@@ -3042,6 +2937,9 @@
             }
             
             try {
+                // 获取当前用户的 auth id
+                const { data: { user } } = await supabase.auth.getUser();
+                
                 const existingTokens = await getAllTokensWithoutLimit();
                 const existingValues = new Set(existingTokens.map(t => t.value));
                 const filteredTokens = tokens.filter(t => !existingValues.has(t.value));
@@ -3060,6 +2958,7 @@
                         import_time: t.importTime,
                         use_time: t.useTime,
                         user: t.user || null,
+                        user_id: user?.id || null,
                         fail_count: t.failCount || 0
                     })));
                 
@@ -3538,6 +3437,75 @@
                 return [];
             }
         }
+
+        // 获取用户未标记的token数量（优化：只查该用户的）
+        async function getUserUnmarkedCount(username) {
+            if (!dbConnected) {
+                const history = JSON.parse(localStorage.getItem('history') || '[]');
+                return history.filter(h => h.user === username && h.status === 'used' && !h.tag).length;
+            }
+
+            try {
+                const { count, error } = await supabase
+                    .from('history')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('user', username)
+                    .eq('status', 'used')
+                    .is('tag', null);
+                
+                if (error) throw error;
+                return count || 0;
+            } catch (error) {
+                console.error('获取未标记数量失败:', error);
+                return 0;
+            }
+        }
+
+        // 获取指定token的历史记录（优化：只查该token的）
+        async function getTokenHistory(tokenId) {
+            if (!dbConnected) {
+                const history = JSON.parse(localStorage.getItem('history') || '[]');
+                return history.filter(h => h.token_id === tokenId || h.tokenId === tokenId);
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('history')
+                    .select('*')
+                    .eq('token_id', tokenId);
+                
+                if (error) throw error;
+                return data || [];
+            } catch (error) {
+                console.error('获取Token历史失败:', error);
+                return [];
+            }
+        }
+
+        // 获取用户在周期内的领取记录（优化：只查该用户的）
+        async function getUserPeriodClaims(username, startDate) {
+            if (!dbConnected) {
+                const history = JSON.parse(localStorage.getItem('history') || '[]');
+                return history.filter(h => 
+                    h.user === username && 
+                    new Date(h.use_time) >= startDate
+                );
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('history')
+                    .select('*')
+                    .eq('user', username)
+                    .gte('use_time', startDate.toISOString());
+                
+                if (error) throw error;
+                return data || [];
+            } catch (error) {
+                console.error('获取周期领取记录失败:', error);
+                return [];
+            }
+        }
         
         async function insertHistory(historyItem) {
             if (!dbConnected) {
@@ -3548,12 +3516,16 @@
             }
             
             try {
+                // 获取当前用户的 auth id
+                const { data: { user } } = await supabase.auth.getUser();
+                
                 const { error } = await supabase
                     .from('history')
                     .insert({
                         id: historyItem.id,
                         token_id: historyItem.tokenId,
                         user: historyItem.user,
+                        user_id: user?.id || null,
                         use_time: historyItem.useTime || historyItem.use_time,
                         tag: historyItem.tag || '',
                         status: historyItem.status
@@ -3798,22 +3770,27 @@
             // 初始化删除时间范围监听器
             initDeleteTimeFilterListener();
             
-            // 根据设置初始化注册按钮显示状态
-            const allowRegistration = await getSettings();
-            const registerBtn = document.getElementById('registerBtn');
-            if (registerBtn) {
-                registerBtn.style.display = allowRegistration ? 'inline-block' : 'none';
-            }
-            
-            // Supabase Auth 模式：始终显示密码输入框
-            const passwordGroup = document.getElementById('passwordGroup');
-            const loginType = document.getElementById('loginType');
-            if (passwordGroup && loginType) {
-                passwordGroup.style.display = 'block'; // Auth 模式必须输入密码
-            }
-            
-            // 设置 Auth 状态变化监听器
+            // 并行执行初始化查询
             if (supabase) {
+                const [settingsResult, sessionResult] = await Promise.all([
+                    getSettings(),
+                    supabase.auth.getSession()
+                ]);
+                
+                // 设置注册按钮显示状态
+                const registerBtn = document.getElementById('registerBtn');
+                if (registerBtn) {
+                    registerBtn.style.display = settingsResult ? 'inline-block' : 'none';
+                }
+                
+                // Supabase Auth 模式：始终显示密码输入框
+                const passwordGroup = document.getElementById('passwordGroup');
+                const loginType = document.getElementById('loginType');
+                if (passwordGroup && loginType) {
+                    passwordGroup.style.display = 'block';
+                }
+                
+                // 设置 Auth 状态变化监听器
                 supabase.auth.onAuthStateChange(async (event, session) => {
                     console.log('Auth 状态变化:', event, session?.user?.id);
                     
@@ -3823,15 +3800,13 @@
                         document.getElementById('adminDashboard').style.display = 'none';
                         document.getElementById('userDashboard').style.display = 'none';
                     } else if (event === 'SIGNED_IN' && session?.user) {
-                        // 页面刷新后自动恢复登录状态
                         await restoreSession(session.user.id);
                     }
                 });
                 
-                // 检查是否有已保存的 session
-                const { data: sessionData } = await supabase.auth.getSession();
-                if (sessionData?.session?.user) {
-                    await restoreSession(sessionData.session.user.id);
+                // 恢复已有 session
+                if (sessionResult.data?.session?.user) {
+                    await restoreSession(sessionResult.data.session.user.id);
                 }
             }
         });
@@ -3870,7 +3845,8 @@
                     document.getElementById('adminDashboard').style.display = 'block';
                     document.getElementById('adminUsername').textContent = memberData.nickname || memberData.username;
                     document.getElementById('adminAvatar').textContent = (memberData.nickname || memberData.username).charAt(0).toUpperCase();
-                    loadAdminData();
+                    // 懒加载：默认加载第一个标签页数据
+                    await loadTokensData();
                 } else {
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('userDashboard').style.display = 'block';
@@ -3883,6 +3859,7 @@
                         document.getElementById('userMottoDisplay').style.display = 'block';
                     }
                     
+                    // 用户界面数据加载
                     await loadUserData();
                 }
                 
@@ -4099,6 +4076,8 @@
                         loginTime: new Date().toISOString()
                     };
                     
+                    startIdleMonitor(); // 启动无操作监控
+                    
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('adminDashboard').style.display = 'block';
                     document.getElementById('adminUsername').textContent = memberData.nickname || username;
@@ -4152,6 +4131,8 @@
                         type: 'user',
                         loginTime: new Date().toISOString()
                     };
+                    
+                    startIdleMonitor(); // 启动无操作监控
                     
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('userDashboard').style.display = 'block';
@@ -4230,9 +4211,22 @@
         }
         
         async function logout() {
+            console.log('🚪 开始退出登录...');
+            
+            // 清除无操作计时器
+            if (idleTimeout) {
+                clearTimeout(idleTimeout);
+                idleTimeout = null;
+            }
+            
             // 登出 Supabase Auth
             if (supabase && supabase.auth) {
-                await supabase.auth.signOut();
+                try {
+                    await supabase.auth.signOut();
+                    console.log('✅ Supabase 登出成功');
+                } catch (e) {
+                    console.error('❌ Supabase 登出失败:', e);
+                }
             }
             
             currentUser = null;
@@ -4249,8 +4243,10 @@
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             
-            // 重新检查设置并更新界面
-            const allowRegistration = await getSettings();
+            console.log('🚪 退出登录完成');
+            
+            // 使用缓存的设置更新界面
+            const allowRegistration = settingsCache !== null ? settingsCache : false;
             const registerBtn = document.getElementById('registerBtn');
             if (registerBtn) {
                 registerBtn.style.display = allowRegistration ? 'inline-block' : 'none';
@@ -4348,10 +4344,13 @@
             }
         }
         
-        async function switchTab(user, tab) {
+        async function switchTab(user, tab, evt) {
+            console.log(`🔄 切换标签页: ${user} -> ${tab}`);
             const tabs = document.querySelectorAll(`#${user}Dashboard .nav-tab`);
             tabs.forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+            if (evt && evt.target) {
+                evt.target.classList.add('active');
+            }
             
             const contents = document.querySelectorAll(`#${user}Dashboard .tab-content`);
             contents.forEach(c => c.classList.remove('active'));
@@ -4359,13 +4358,47 @@
             document.getElementById(`${user}${tab.charAt(0).toUpperCase() + tab.slice(1)}Tab`).classList.add('active');
             
             if (user === 'admin') {
-                // 如果切换到设置页面，优先加载设置
-                if (tab === 'settings') {
-                    await loadSettings();
-                } else {
-                    loadAdminData();
+                // 懒加载：只加载当前标签页需要的数据
+                switch(tab) {
+                    case 'tokens':
+                        await loadTokensData();
+                        break;
+                    case 'allocation':
+                        await renderAllocationTable();
+                        break;
+                    case 'members':
+                        await loadMembersData();
+                        break;
+                    case 'history':
+                        await loadHistoryData();
+                        break;
+                    case 'analysis':
+                        await loadGlobalStats();
+                        break;
+                    case 'settings':
+                        await loadSettings();
+                        break;
                 }
             }
+            console.log(`✅ 标签页切换完成: ${tab}`);
+        }
+        
+        // 懒加载：Token数据
+        async function loadTokensData() {
+            console.log('📋 加载Token数据...');
+            await filterTokensWithPagination();
+        }
+        
+        // 懒加载：成员数据
+        async function loadMembersData() {
+            console.log('👥 加载成员数据...');
+            await filterMembersWithPagination();
+        }
+        
+        // 懒加载：历史数据
+        async function loadHistoryData() {
+            console.log('📜 加载历史数据...');
+            await filterHistoryWithPagination();
         }
         
         async function importTokens() {
@@ -4411,7 +4444,7 @@
                 showAlert('导入token失败', 'error', 'adminAlert');
             }
             
-            loadAdminData();
+            await loadTokensData();
         }
         
         async function importFromExcel() {
@@ -5130,9 +5163,9 @@
                 
                 console.log(`📊 分页信息: 第${memberPaginationState.currentPage}页/共${memberPaginationState.totalPages}页`);
                 
-                // 更新下拉菜单(需要获取所有成员)
-                const allMembersResult = await getMembersWithPagination({}, { page: 1, pageSize: 10000 });
-                updateMemberDropdowns(allMembersResult.data);
+                // 更新下拉菜单（使用缓存）
+                const allMembers = await getAllMembersWithoutLimit();
+                updateMemberDropdowns(allMembers);
                 
             } catch (error) {
                 console.error('❌ 分页查询成员失败:', error);
@@ -5572,34 +5605,40 @@
         
         // ==================== 系统设置 ====================
         async function getSettings() {
+            // 检查缓存
+            const now = Date.now();
+            if (settingsCache !== null && (now - settingsCacheTime) < SETTINGS_CACHE_TTL) {
+                console.log('📋 使用缓存的设置:', settingsCache);
+                return settingsCache;
+            }
+            
             if (dbConnected) {
                 try {
                     const { data, error } = await supabase
                         .from('settings')
                         .select('*')
-                        .eq('key', 'allow_registration');
+                        .eq('key', 'allow_registration')
+                        .limit(1);
                     
                     if (error) {
                         console.error('获取设置失败:', error);
-                        return false; // 默认不允许注册
+                        return false;
                     }
                     
-                    if (data && data.length > 0) {
-                        const result = data[0].value === 'true';
-                        console.log('从数据库读取设置:', data[0], '结果:', result);
-                        return result;
-                    }
-                    
-                    console.log('数据库无设置，返回默认值 false');
-                    return false; // 默认不允许注册
+                    const result = data && data.length > 0 ? data[0].value === 'true' : false;
+                    settingsCache = result;
+                    settingsCacheTime = now;
+                    console.log('📋 从数据库读取设置:', result);
+                    return result;
                 } catch (e) {
                     console.error('获取设置异常:', e);
-                    return false; // 默认不允许注册
+                    return false;
                 }
             } else {
                 const settings = JSON.parse(localStorage.getItem('system_settings') || '{}');
-                const result = settings.allow_registration === 'true'; // 默认不允许注册
-                console.log('从localStorage读取设置:', settings, '结果:', result);
+                const result = settings.allow_registration === 'true';
+                settingsCache = result;
+                settingsCacheTime = now;
                 return result;
             }
         }
@@ -5887,6 +5926,7 @@
             }
         }
         
+        // 刷新所有数据（谨慎使用，仅在必要时调用）
         async function loadAdminData() {
             // 初始化Token分页状态
             paginationState.currentPage = 1;
@@ -5903,144 +5943,131 @@
             historyPaginationState.pageSize = parseInt(document.getElementById('historyDisplayLimit').value) || 50;
             historyPaginationState.filters = {};
             
-            // 并行加载数据，提升加载速度
-            await Promise.all([
-                filterTokensWithPagination(),
-                filterMembersWithPagination(),
-                filterHistoryWithPagination(),
-                loadSettings()
-            ]);
-            await loadGlobalStats();
+            // 只加载Token数据（懒加载其他数据）
+            await filterTokensWithPagination();
         }
         
         async function loadGlobalStats() {
             console.log('📊 开始加载全局统计数据...');
             
-            // 并行获取tokens和members
-            const [tokens, members] = await Promise.all([
-                getAllTokensWithoutLimit(),
-                getAllMembersWithoutLimit()
-            ]);
-            
-            console.log(`📈 统计数据: Token数=${tokens.length}, 成员数=${members.length}`);
-            
-            const totalTokens = tokens.length;
-            const unusedTokens = tokens.filter(t => t.status === 'unused').length;
-            const usedTokens = tokens.filter(t => t.status === 'used').length;
-            const failedTokens = tokens.filter(t => t.status === 'failed').length;
-            
-            const totalMembers = members.length;
-            const totalQuota = members.reduce((sum, m) => sum + (m.quota || 0), 0);
-            const totalUsed = members.reduce((sum, m) => sum + (m.used || 0), 0);
-            const totalRemaining = totalQuota - totalUsed;
-            
-            const globalStats = document.getElementById('globalStats');
-            globalStats.innerHTML = `
-                <div class="stat-card">
-                    <h4>总Token数</h4>
-                    <div class="number">${totalTokens}</div>
-                    <div class="percentage">100%</div>
-                </div>
-                <div class="stat-card">
-                    <h4>未使用</h4>
-                    <div class="number">${unusedTokens}</div>
-                    <div class="percentage">${totalTokens > 0 ? ((unusedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
-                </div>
-                <div class="stat-card">
-                    <h4>已使用</h4>
-                    <div class="number">${usedTokens}</div>
-                    <div class="percentage">${totalTokens > 0 ? ((usedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
-                </div>
-                <div class="stat-card">
-                    <h4>未通过</h4>
-                    <div class="number">${failedTokens}</div>
-                    <div class="percentage">${totalTokens > 0 ? ((failedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
-                </div>
-                <div class="stat-card">
-                    <h4>总成员数</h4>
-                    <div class="number">${totalMembers}</div>
-                    <div class="percentage">活跃用户</div>
-                </div>
-            `;
-            
-            const dimensionCounts = {};
-            tokens.forEach(token => {
-                if (token.tag) {
-                    dimensionCounts[token.tag] = (dimensionCounts[token.tag] || 0) + 1;
-                }
-            });
-            
-            const dimensionTableBody = document.getElementById('globalDimensionTableBody');
-            dimensionTableBody.innerHTML = '';
-            
-            const fragment = document.createDocumentFragment();
-            
-            Object.entries(dimensionCounts).forEach(([dimension, count]) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${dimension}</td>
-                    <td>${count}</td>
-                    <td>${totalTokens > 0 ? ((count / totalTokens) * 100).toFixed(1) : 0}%</td>
+            if (!dbConnected) {
+                // 离线模式使用缓存
+                const [tokens, members] = await Promise.all([
+                    getAllTokensWithoutLimit(),
+                    getAllMembersWithoutLimit()
+                ]);
+                renderStats(tokens, members);
+                return;
+            }
+
+            try {
+                // 直接用SQL聚合查询，更准确
+                const [
+                    { count: totalTokens },
+                    { count: unusedTokens },
+                    { count: usedTokens },
+                    { count: failedTokens },
+                    { count: totalMembers }
+                ] = await Promise.all([
+                    supabase.from('tokens').select('*', { count: 'exact', head: true }),
+                    supabase.from('tokens').select('*', { count: 'exact', head: true }).eq('status', 'unused'),
+                    supabase.from('tokens').select('*', { count: 'exact', head: true }).eq('status', 'used'),
+                    supabase.from('tokens').select('*', { count: 'exact', head: true }).eq('status', 'failed'),
+                    supabase.from('members').select('*', { count: 'exact', head: true })
+                ]);
+
+                console.log(`📈 统计数据: 总Token=${totalTokens}, 未使用=${unusedTokens}, 已使用=${usedTokens}, 未通过=${failedTokens}, 成员=${totalMembers}`);
+                
+                const globalStats = document.getElementById('globalStats');
+                globalStats.innerHTML = `
+                    <div class="stat-card">
+                        <h4>总Token数</h4>
+                        <div class="number">${totalTokens}</div>
+                        <div class="percentage">100%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>未使用</h4>
+                        <div class="number">${unusedTokens}</div>
+                        <div class="percentage">${totalTokens > 0 ? ((unusedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>已使用</h4>
+                        <div class="number">${usedTokens}</div>
+                        <div class="percentage">${totalTokens > 0 ? ((usedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>未通过</h4>
+                        <div class="number">${failedTokens}</div>
+                        <div class="percentage">${totalTokens > 0 ? ((failedTokens / totalTokens) * 100).toFixed(1) : 0}%</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>总成员数</h4>
+                        <div class="number">${totalMembers}</div>
+                        <div class="percentage">活跃用户</div>
+                    </div>
                 `;
-                fragment.appendChild(row);
-            });
-            
-            dimensionTableBody.appendChild(fragment);
-            
-            await renderAllocationTable();
+
+                // 维度统计：只查 tag 字段，不拉全量数据
+                const { data: tagData } = await supabase
+                    .from('tokens')
+                    .select('tag');
+                
+                const dimensionCounts = {};
+                tagData?.forEach(token => {
+                    if (token.tag) {
+                        dimensionCounts[token.tag] = (dimensionCounts[token.tag] || 0) + 1;
+                    }
+                });
+                
+                const dimensionTableBody = document.getElementById('globalDimensionTableBody');
+                dimensionTableBody.innerHTML = '';
+                
+                const fragment = document.createDocumentFragment();
+                
+                Object.entries(dimensionCounts).forEach(([dimension, count]) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${dimension}</td>
+                        <td>${count}</td>
+                        <td>${totalTokens > 0 ? ((count / totalTokens) * 100).toFixed(1) : 0}%</td>
+                    `;
+                    fragment.appendChild(row);
+                });
+                
+                dimensionTableBody.appendChild(fragment);
+                
+                await renderAllocationTable();
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
         }
         
         async function renderAllocationTable() {
-            // 并行获取数据
-            const [allocations, history, members] = await Promise.all([
-                getAllocations(),
-                getAllHistoryWithoutLimit(),
-                getAllMembersWithoutLimit()
-            ]);
-            
-            // 获取当前周的开始时间（周一）
-            const now = new Date();
-            const startOfWeek = new Date(now);
-            startOfWeek.setDate(now.getDate() - now.getDay() + 1);
-            startOfWeek.setHours(0, 0, 0, 0);
+            console.log('📊 加载分配规则表格...');
+            // 只获取分配规则，不需要history和members来显示设置界面
+            const allocations = await getAllocations();
+            console.log('📊 分配规则:', allocations);
             
             const tableBody = document.getElementById('allocationTableBody');
             tableBody.innerHTML = '';
             
             const fragment = document.createDocumentFragment();
             
+            // 渲染成员规则
             Object.entries(allocations.members || {}).forEach(([username, rules]) => {
-                const member = members.find(m => m.username === username);
-                const maxClaims = rules.maxClaims || allocations.global.maxClaims;
-                
-                // 计算本周领取次数
-                const currentWeekClaims = history.filter(h => 
-                    h.user === username && 
-                    new Date(h.use_time) >= startOfWeek
-                ).length;
-                
-                // 计算总领取次数
-                const totalClaims = history.filter(h => h.user === username).length;
-                
-                const remainingClaims = Math.max(0, maxClaims - currentWeekClaims);
-                
                 const periodText = rules.periodType === 'days' 
                     ? `${rules.period}天` 
                     : '自然周';
                 
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${member ? member.nickname : username}</td>
+                    <td>${username}</td>
                     <td>${periodText}</td>
-                    <td>${maxClaims}</td>
+                    <td>${rules.maxClaims || allocations.global.maxClaims}</td>
                     <td>${rules.claimAmount || allocations.global.claimAmount}</td>
                     <td>个人</td>
                     <td>
-                        <div style="margin-bottom: 5px;">
-                            <span style="font-size: 12px; color: #666;">
-                                总申请: ${totalClaims} | 本周: ${currentWeekClaims}/${maxClaims} | 剩余: ${remainingClaims}
-                            </span>
-                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="editMemberAllocation('${username}')">编辑</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteMemberAllocation('${username}')">删除</button>
                     </td>
                 `;
@@ -6267,12 +6294,21 @@
                     page: result.page
                 });
                 
-                // 获取members和tokens数据用于显示
-                const membersResult = await getMembersWithPagination({}, { page: 1, pageSize: 10000 });
-                const tokensResult = await getTokensWithPagination({}, { page: 1, pageSize: 10000 });
+                // 使用缓存的成员数据
+                const members = await getAllMembersWithoutLimit();
                 
-                // 保存 tokens 数据到全局变量，供导出功能使用
-                window.currentFilteredTokens = tokensResult.data;
+                // 只查询当前页需要的token（优化：不再查10000条）
+                const tokenIds = [...new Set(result.data.map(item => item.token_id))];
+                const tokensMap = {};
+                if (tokenIds.length > 0) {
+                    const { data: tokensData } = await supabase
+                        .from('tokens')
+                        .select('id, value')
+                        .in('id', tokenIds);
+                    if (tokensData) {
+                        tokensData.forEach(t => tokensMap[t.id] = t);
+                    }
+                }
                 
                 // 更新表格
                 const tbody = document.getElementById('historyTableBody');
@@ -6281,8 +6317,8 @@
                 const fragment = document.createDocumentFragment();
                 
                 result.data.forEach(item => {
-                    const member = membersResult.data.find(m => m.username === item.user);
-                    const token = tokensResult.data.find(t => t.id === item.token_id);
+                    const member = members.find(m => m.username === item.user);
+                    const token = tokensMap[item.token_id];
                     const row = document.createElement('tr');
                     
                     let statusBadge = '';
@@ -6708,13 +6744,13 @@
             contributePaginationState.pageSize = 50;
             contributePaginationState.filters = {};
             
-            // 并行获取成员信息和分配规则
-            const [membersResult, allocations] = await Promise.all([
-                getMembersWithPagination({}, { page: 1, pageSize: 10000 }),
+            // 使用缓存获取成员信息，不查10000条
+            const [members, allocations] = await Promise.all([
+                getAllMembersWithoutLimit(),
                 getAllocations()
             ]);
             
-            const member = membersResult.data.find(m => m.username === currentUser.username);
+            const member = members.find(m => m.username === currentUser.username);
 
             if (member) {
                 document.getElementById('userQuota').textContent = member.quota || 0;
@@ -6730,8 +6766,10 @@
 
             // 获取当前周的开始时间（周一）
             const now = new Date();
+            const dayOfWeek = now.getDay(); // 0=周日, 1=周一, ..., 6=周六
+            const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 周日需要回退6天
             const startOfWeek = new Date(now);
-            startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+            startOfWeek.setDate(now.getDate() - daysToMonday);
             startOfWeek.setHours(0, 0, 0, 0);
             
             console.log('自然周统计:', {
@@ -6976,9 +7014,17 @@
                     page: result.page
                 });
                 
-                // 获取tokens数据用于显示
-                const tokensResult = await getTokensWithPagination({}, { page: 1, pageSize: 10000 });
-                window.currentFilteredTokens = tokensResult.data;
+                // 只获取当前页面需要的tokens（根据token_id列表）
+                const tokenIds = [...new Set(result.data.map(item => item.token_id))];
+                const tokensMap = {};
+                
+                if (dbConnected && tokenIds.length > 0) {
+                    const { data: tokensData } = await supabase
+                        .from('tokens')
+                        .select('*')
+                        .in('id', tokenIds);
+                    (tokensData || []).forEach(t => tokensMap[t.id] = t);
+                }
                 
                 // 更新表格
                 const tbody = document.getElementById('userTokenTableBody');
@@ -6987,7 +7033,7 @@
                 const fragment = document.createDocumentFragment();
                 
                 result.data.forEach(item => {
-                    const token = tokensResult.data.find(t => t.id === item.token_id);
+                    const token = tokensMap[item.token_id];
                     const row = document.createElement('tr');
                     
                     let statusBadge = '';
@@ -7077,54 +7123,81 @@
         }
         
         async function requestTokens() {
-            const count = parseInt(document.getElementById('requestCount').value);
+            try {
+                console.log('requestTokens 被调用');
+                const count = parseInt(document.getElementById('requestCount').value);
+                console.log('申请数量:', count);
 
-            if (!count || count < 1 || count > 100) {
-                alert('请输入有效的申请数量(1-100)');
-                return;
-            }
-
-            const members = userDataCache.members || await getAllMembersWithoutLimit();
-            const member = members.find(m => m.username === currentUser.username);
-            
-            if (!member) {
-                alert('用户不存在');
-                return;
-            }
-            
-            if ((member.used || 0) + count > member.quota) {
-                alert(`配额不足!剩余配额:${member.quota - (member.used || 0)}`);
-                return;
-            }
-            
-            // 检查是否需要先标记已领取的token
-            const requireMark = await getRequireMarkBeforeClaim();
-            const history = await getAllHistory(0);
-            
-            if (requireMark) {
-                // 检查是否有未标记的token（排除已标记为未通过的token）
-                const unmarkedTokens = history.filter(h =>
-                    h.user === currentUser.username &&
-                    h.status === 'used' &&
-                    !h.tag
-                );
-                
-                if (unmarkedTokens.length > 0) {
-                    alert(`您有${unmarkedTokens.length}个Token需要先标记!\n\n必须完成上一次申请的标记才能继续申请。`);
+                if (!count || count < 1 || count > 100) {
+                    alert('请输入有效的申请数量(1-100)');
                     return;
                 }
-            }
-            
-            const allocations = await getAllocations();
+
+                const members = userDataCache.members || await getAllMembersWithoutLimit();
+                const member = members.find(m => m.username === currentUser.username);
+                
+                if (!member) {
+                    alert('用户不存在');
+                    return;
+                }
+                
+                if ((member.used || 0) + count > member.quota) {
+                    alert(`配额不足!剩余配额:${member.quota - (member.used || 0)}`);
+                    return;
+                }
+                
+                // 检查是否需要先标记已领取的token
+                const requireMark = await getRequireMarkBeforeClaim();
+                
+                if (requireMark && dbConnected) {
+                    // 只查当前用户未标记的token
+                    const { data: unmarkedData, error: unmarkedError } = await supabase
+                        .from('history')
+                        .select('id')
+                        .eq('user', currentUser.username)
+                        .eq('status', 'used')
+                        .is('tag', null)
+                        .limit(1);
+                    
+                    if (unmarkedData && unmarkedData.length > 0) {
+                        alert(`您有未标记的Token需要先标记!\n\n必须完成上一次申请的标记才能继续申请。`);
+                        return;
+                    }
+                } else if (requireMark) {
+                    const history = JSON.parse(localStorage.getItem('history') || '[]');
+                    const unmarkedTokens = history.filter(h =>
+                        h.user === currentUser.username &&
+                        h.status === 'used' &&
+                        !h.tag
+                    );
+                    if (unmarkedTokens.length > 0) {
+                        alert(`您有${unmarkedTokens.length}个Token需要先标记!\n\n必须完成上一次申请的标记才能继续申请。`);
+                        return;
+                    }
+                }
+                
+                // 获取用户的历史记录用于计算周期领取次数
+                let history = [];
+                if (dbConnected) {
+                    const { data: userHistory } = await supabase
+                        .from('history')
+                        .select('*')
+                        .eq('user', currentUser.username);
+                    history = userHistory || [];
+                } else {
+                    const allHistory = JSON.parse(localStorage.getItem('history') || '[]');
+                    history = allHistory.filter(h => h.user === currentUser.username);
+                }
+                
+                const allocations = await getAllocations();
             const memberAllocation = (allocations.members || {})[currentUser.username] || allocations.global;
             
             const maxClaims = memberAllocation.maxClaims || 1;
             
-            // 计算周期内的领取次数 - 基于申请批次统计(相同秒数的记录视为同一次申请)
+            // 计算周期内的领取次数
             let periodClaims = [];
 
             if (memberAllocation.periodType === 'days' || !memberAllocation.periodType) {
-                // 按天计算的周期
                 const period = memberAllocation.period || 7;
                 const periodStart = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
                 periodClaims = history.filter(h =>
@@ -7132,7 +7205,6 @@
                     new Date(h.use_time) >= periodStart
                 );
             } else {
-                // 按自然周计算（周一至周日）
                 const now = new Date();
                 const startOfWeek = new Date(now);
                 startOfWeek.setDate(now.getDate() - now.getDay() + 1);
@@ -7154,12 +7226,27 @@
                 return;
             }
             
-            const tokens = await getAllTokensWithoutLimit();
+            // 只获取可用状态的tokens（unused和failed），不加载全部
+            let failedTokens = [];
+            let unusedTokens = [];
+            
+            if (dbConnected) {
+                // 并行查询failed和unused状态的tokens
+                const [failedResult, unusedResult] = await Promise.all([
+                    supabase.from('tokens').select('*').eq('status', 'failed').limit(100),
+                    supabase.from('tokens').select('*').eq('status', 'unused').limit(100)
+                ]);
+                failedTokens = failedResult.data || [];
+                unusedTokens = unusedResult.data || [];
+                console.log('📊 可用Token: failed=', failedTokens.length, ', unused=', unusedTokens.length);
+            } else {
+                const tokens = JSON.parse(localStorage.getItem('tokens') || '[]');
+                failedTokens = tokens.filter(t => t.status === 'failed');
+                unusedTokens = tokens.filter(t => t.status === 'unused');
+            }
 
             // 优先分配未通过的token，允许其他用户申请
             let tokensToAllocate = [];
-            const failedTokens = tokens.filter(t => t.status === 'failed');
-            const unusedTokens = tokens.filter(t => t.status === 'unused');
 
             // 先尝试分配未通过的token
             if (failedTokens.length > 0) {
@@ -7244,6 +7331,10 @@
             } else {
                 showAlert('申请Token失败', 'error', 'userAlert');
             }
+            } catch (error) {
+                console.error('申请Token出错:', error);
+                alert('申请Token出错: ' + error.message);
+            }
         }
         
         function markUserToken(tokenId) {
@@ -7261,20 +7352,45 @@
                 return;
             }
             console.log('当前标记的Token ID:', currentMarkToken);
+            
+            // 清除缓存，确保获取最新数据
+            userDataCache = {
+                tokens: null,
+                history: null,
+                members: null,
+                lastLoadTime: 0
+            };
 
             try {
-                const tokens = await getAllTokensWithoutLimit();
-                const token = tokens.find(t => t.id === currentMarkToken);
+                // 直接查询单个token和它的历史记录
+                console.log('🔍 开始查询Token和历史记录...');
+                let token = null;
+                let tokenHistory = [];
+                
+                if (dbConnected) {
+                    console.log('📡 数据库模式查询');
+                    const [tokenResult, historyResult] = await Promise.all([
+                        supabase.from('tokens').select('*').eq('id', currentMarkToken).limit(1),
+                        supabase.from('history').select('*').eq('token_id', currentMarkToken)
+                    ]);
+                    console.log('📡 查询结果:', tokenResult, historyResult);
+                    token = tokenResult.data?.[0] || null;
+                    tokenHistory = historyResult.data || [];
+                } else {
+                    console.log('💾 本地存储模式');
+                    const tokens = JSON.parse(localStorage.getItem('tokens') || '[]');
+                    const history = JSON.parse(localStorage.getItem('history') || '[]');
+                    token = tokens.find(t => t.id === currentMarkToken) || null;
+                    tokenHistory = history.filter(h => h.token_id === currentMarkToken);
+                }
+                
                 console.log('找到的Token:', token);
+                console.log('该Token的历史记录:', tokenHistory);
 
                 if (!token) {
                     alert('Token不存在');
                     return;
                 }
-
-                const history = await getAllHistory(0); // 传入0表示不限制数量
-                const tokenHistory = history.filter(h => h.token_id === currentMarkToken);
-                console.log('该Token的历史记录:', tokenHistory);
 
                 // 统计该token被所有用户标记为未通过的总次数
                 const failedCount = tokenHistory.filter(h => h.status === 'failed').length;
@@ -7305,8 +7421,10 @@
 
                             alert('该Token已累计3次被标记为未通过，已自动标记为无效数据');
                             closeModal('markModal');
-                            // 只刷新token表格，保持当前分页状态和顺序
-                            await filterUserTokensWithPagination();
+                            // 清除缓存
+                            userDataCache = { tokens: null, history: null, members: null, lastLoadTime: 0 };
+                            showAlert('标记成功', 'success', 'userAlert');
+                            await loadUserData();
                         } else {
                             alert('Token标记失败');
                         }
@@ -7350,8 +7468,10 @@
 
                             alert('Token标记为未通过，该Token已释放可供其他用户使用');
                             closeModal('markModal');
-                            // 只刷新token表格，保持当前分页状态和顺序
-                            await filterUserTokensWithPagination();
+                            // 清除缓存
+                            userDataCache = { tokens: null, history: null, members: null, lastLoadTime: 0 };
+                            showAlert('标记成功', 'success', 'userAlert');
+                            await loadUserData();
                         } else {
                             alert('Token标记失败');
                         }
@@ -7373,14 +7493,27 @@
                         // 删除当前用户对该token的历史记录
                         const historyItem = tokenHistory.find(h => h.user === currentUser.username);
                         if (historyItem) {
-                            await deleteHistory(historyItem.id);
-                            console.log('已删除历史记录:', historyItem.id);
+                            const deleteResult = await deleteHistory(historyItem.id);
+                            console.log('删除历史记录结果:', deleteResult, 'historyId:', historyItem.id);
+                            if (!deleteResult) {
+                                console.error('删除历史记录失败！');
+                            }
                         }
+                        
+                        // 清除缓存，确保下次查询从数据库获取最新数据
+                        userDataCache = {
+                            tokens: null,
+                            history: null,
+                            members: null,
+                            lastLoadTime: 0
+                        };
 
                         alert('Token已标记为未使用，已回收可重新分发');
                         closeModal('markModal');
-                        // 刷新用户token表格，该token会从表格中消失
-                        await filterUserTokensWithPagination();
+                        // 清除缓存
+                        userDataCache = { tokens: null, history: null, members: null, lastLoadTime: 0 };
+                        showAlert('标记成功', 'success', 'userAlert');
+                        await loadUserData();
                     } else {
                         alert('Token标记失败');
                     }
@@ -7401,10 +7534,15 @@
 
                         if (historyItem) {
                             // 更新已有记录，保持原有的use_time不变
-                            await updateHistory(historyItem.id, {
+                            const updateResult = await updateHistory(historyItem.id, {
                                 tag: tag,
                                 status: status
                             });
+                            console.log('更新历史记录结果:', updateResult, 'historyId:', historyItem.id, 'tag:', tag);
+                            if (!updateResult) {
+                                console.error('更新历史记录失败！');
+                                alert('标记维度更新失败，请检查数据库权限');
+                            }
                         } else {
                             // 如果没有找到当前用户的历史记录，创建新的
                             // 使用token的原始使用时间，而不是当前时间，保持排序不变
@@ -7421,10 +7559,15 @@
                             });
                         }
 
-                        // Token标记成功，静默处理不提示
+                        // 清除缓存并等待同步
+                        userDataCache = { tokens: null, history: null, members: null, lastLoadTime: 0 };
+                        
+                        // Token标记成功
                         closeModal('markModal');
-                        // 只刷新token表格，保持当前分页状态和顺序
-                        await filterUserTokensWithPagination();
+                        showAlert('标记成功', 'success', 'userAlert');
+                        
+                        // 重新加载用户数据
+                        await loadUserData();
                     } else {
                         alert('Token标记失败');
                     }
