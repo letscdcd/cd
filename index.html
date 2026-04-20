@@ -105,6 +105,35 @@
             padding: 50px;
             text-align: center;
             contain: layout;
+            display: none; /* 默认隐藏，等待session检查 */
+        }
+        
+        .loading-screen {
+            padding: 100px 50px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            color: #666;
+            font-size: 16px;
         }
         
         .login-form {
@@ -212,9 +241,8 @@
         .nav-tabs {
             display: flex;
             gap: 10px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             margin-bottom: 30px;
-            contain: layout style;
         }
         
         .nav-tab {
@@ -229,6 +257,188 @@
             transition: all 0.3s;
         }
         
+        /* 手机端汉堡菜单按钮 */
+        .hamburger-btn {
+            display: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            min-width: 44px;
+            min-height: 44px;
+            flex-shrink: 0;
+        }
+        
+        /* 手机端标签页一行显示 */
+        @media (max-width: 768px) {
+            /* 减少body两边的空白 */
+            body {
+                padding: 1px;
+            }
+            
+            .container {
+                border-radius: 4px;
+            }
+            
+            .header {
+                padding: 8px 6px;
+            }
+            
+            .login-section {
+                padding: 10px 4px;
+            }
+            
+            .card {
+                padding: 8px 4px;
+            }
+            
+            .user-dashboard {
+                padding: 4px;
+                padding-bottom: 70px !important;
+            }
+            
+            /* 用户dashboard容器 */
+            .user-dashboard {
+                position: relative;
+            }
+            
+            /* 顶部菜单容器 */
+            #userNavTabs {
+                gap: 8px;
+                margin-bottom: 15px;
+                align-items: center;
+                flex-wrap: wrap;
+                display: flex;
+            }
+            
+            /* 首页按钮样式 */
+            #userNavTabs .nav-tab:first-child {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 8px 16px;
+                font-size: 14px;
+                min-height: 44px;
+            }
+            
+            /* 其他菜单项默认隐藏 */
+            #userNavTabs .nav-tab:not(:first-child) {
+                display: none !important;
+            }
+            
+            /* 汉堡按钮显示 */
+            #hamburgerBtn {
+                display: block;
+                position: absolute;
+                right: 10px;
+                top: 125px;
+                z-index: 100;
+            }
+            
+            /* 展开时隐藏汉堡按钮 */
+            #hamburgerBtn.hidden {
+                display: none;
+            }
+            
+            /* 展开时的样式 */
+            #userNavTabs.expanded {
+                gap: 8px;
+            }
+            
+            /* 展开时显示所有菜单项 */
+            #userNavTabs.expanded .nav-tab {
+                display: flex !important;
+                flex: 1 1 calc(50% - 4px);
+                padding: 8px 10px;
+                font-size: 13px;
+                min-height: 44px;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            /* 展开时首页按钮占满一行 */
+            #userNavTabs.expanded .nav-tab:first-child {
+                flex: 1 1 100%;
+            }
+        }
+        
+        /* 桌面端隐藏汉堡按钮 */
+        @media (min-width: 769px) {
+            #hamburgerBtn, #adminHamburgerBtn {
+                display: none !important;
+            }
+        }
+        
+        /* 管理员界面手机端样式 */
+        @media (max-width: 768px) {
+            /* 管理员dashboard容器 */
+            .admin-dashboard {
+                position: relative;
+                padding: 4px;
+                padding-bottom: 10px;
+            }
+            
+            /* 顶部菜单容器 */
+            #adminNavTabs {
+                gap: 8px;
+                margin-bottom: 15px;
+                align-items: center;
+                flex-wrap: wrap;
+                display: flex;
+            }
+            
+            /* 首页按钮样式 */
+            #adminNavTabs .nav-tab:first-child {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 8px 16px;
+                font-size: 14px;
+                min-height: 44px;
+            }
+            
+            /* 其他菜单项默认隐藏 */
+            #adminNavTabs .nav-tab:not(:first-child) {
+                display: none !important;
+            }
+            
+            /* 汉堡按钮显示 */
+            #adminHamburgerBtn {
+                display: block;
+                position: absolute;
+                right: 10px;
+                top: 125px;
+                z-index: 100;
+            }
+            
+            /* 展开时隐藏汉堡按钮 */
+            #adminHamburgerBtn.hidden {
+                display: none;
+            }
+            
+            /* 展开时的样式 */
+            #adminNavTabs.expanded {
+                gap: 8px;
+            }
+            
+            /* 展开时显示所有菜单项 */
+            #adminNavTabs.expanded .nav-tab {
+                display: flex !important;
+                flex: 1 1 calc(50% - 4px);
+                padding: 8px 10px;
+                font-size: 13px;
+                min-height: 44px;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            /* 展开时首页按钮占满一行 */
+            #adminNavTabs.expanded .nav-tab:first-child {
+                flex: 1 1 100%;
+            }
+        }
+        
         .nav-tab:hover, .nav-tab.active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -241,6 +451,75 @@
         
         .tab-content.active {
             display: block;
+        }
+        
+        /* 手机端底部菜单 */
+        .mobile-bottom-nav {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 6px 0;
+            padding-bottom: calc(6px + env(safe-area-inset-bottom));
+            border-top: 1px solid #eee;
+        }
+        
+        .mobile-bottom-nav .nav-items {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+        
+        .mobile-bottom-nav .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4px 6px;
+            border: none;
+            background: none;
+            color: #666;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .mobile-bottom-nav .nav-item.active {
+            color: #667eea;
+        }
+        
+        .mobile-bottom-nav .nav-item .icon {
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+        
+        /* 手机端显示底部菜单 */
+        @media (max-width: 768px) {
+            .mobile-bottom-nav {
+                display: none; /* 默认隐藏，由JS控制显示 */
+            }
+            
+            /* 用户登录后显示底部菜单 */
+            .mobile-bottom-nav.show {
+                display: block !important;
+            }
+            
+            .stats-grid {
+                gap: 10px;
+            }
+            
+            .stat-card {
+                padding: 10px;
+            }
+        }
+        
+        /* 桌面端隐藏底部菜单 */
+        @media (min-width: 769px) {
+            .mobile-bottom-nav {
+                display: none !important;
+            }
         }
         
         .card {
@@ -549,10 +828,6 @@
         }
         
         @media (max-width: 768px) {
-            .nav-tabs {
-                flex-direction: column;
-            }
-            
             .filters {
                 flex-direction: column;
                 align-items: stretch;
@@ -671,6 +946,12 @@
             <p class="subtitle">高效、安全的资源管理平台</p>
         </div>
         
+        <!-- 加载中界面 -->
+        <div class="loading-screen" id="loadingScreen">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">正在检查登录状态...</div>
+        </div>
+        
         <div class="login-section" id="loginSection">
             <!-- 登录表单 -->
             <div class="login-form" id="loginForm">
@@ -739,8 +1020,8 @@
                 <button class="btn btn-danger" onclick="logout()">退出登录</button>
             </div>
             
-            <div class="nav-tabs">
-                <button class="nav-tab active" onclick="switchTab('admin', 'tokens', event)">Token管理</button>
+            <div class="nav-tabs" id="adminNavTabs">
+                <button class="nav-tab active" onclick="switchTab('admin', 'tokens', event)">首页</button>
                 <button class="nav-tab" onclick="switchTab('admin', 'allocation', event)">Token分配</button>
                 <button class="nav-tab" onclick="switchTab('admin', 'members', event)">成员管理</button>
                 <button class="nav-tab" onclick="switchTab('admin', 'history', event)">使用历史</button>
@@ -748,6 +1029,7 @@
                 <button class="nav-tab" onclick="switchTab('admin', 'settings', event)">⚙️ 设置</button>
                 <button class="nav-tab" onclick="openChangePasswordModal()">修改密码</button>
             </div>
+            <button class="hamburger-btn" id="adminHamburgerBtn" type="button">☰</button>
             
             <div id="adminAlert" class="alert"></div>
             
@@ -1333,30 +1615,17 @@
                 <button class="btn btn-danger" onclick="logout()">退出登录</button>
             </div>
             
-            <div class="nav-tabs">
-                <button class="nav-tab active" onclick="switchUserTab('apply')">申请Token</button>
+            <div class="nav-tabs" id="userNavTabs">
+                <button class="nav-tab active" onclick="switchUserTab('apply')">首页</button>
                 <button class="nav-tab" onclick="switchUserTab('contribute')">🐝 贡献Token</button>
+                <button class="nav-tab" onclick="switchUserTab('quota')">📊 我的配额</button>
                 <button class="nav-tab" onclick="switchUserTab('profile')">👤 个人中心</button>
             </div>
+            <button class="hamburger-btn" id="hamburgerBtn" type="button">☰</button>
             
             <!-- 格言展示 -->
             <div id="userMottoDisplay" style="margin: 20px 0; padding: 15px 20px; background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%); border-radius: 10px; border-left: 4px solid #667eea; display: none;">
                 <p style="color: #555; font-size: 1em; font-style: italic; margin: 0; line-height: 1.6;" id="userMotto"></p>
-            </div>
-            
-            <div class="stats-grid" style="margin-bottom: 30px;">
-                <div class="stat-card">
-                    <h4>我的配额</h4>
-                    <div class="number" id="userQuota">0</div>
-                </div>
-                <div class="stat-card">
-                    <h4>已领取</h4>
-                    <div class="number" id="userUsed">0</div>
-                </div>
-                <div class="stat-card">
-                    <h4>剩余</h4>
-                    <div class="number" id="userRemaining">0</div>
-                </div>
             </div>
             
             <div id="userAlert" class="alert"></div>
@@ -1374,7 +1643,16 @@
                         <button class="btn btn-primary" onclick="requestTokens()">申请Token</button>
                     </div>
                 </div>
-                <div class="card" style="background: white; border: 2px solid #667eea; margin-bottom: 20px;">
+                <!-- 最近申请的Token移到申请按钮下面 -->
+                <div class="card" style="background: white; border: 2px solid #667eea; margin-top: 15px;" id="recentTokensCard">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="color: #333; margin: 0;">最近申请的Token</h4>
+                        <button class="btn btn-primary" onclick="copyRecentTokens()" style="padding: 5px 15px; font-size: 0.9em;">📋 一键复制</button>
+                    </div>
+                    <div id="recentTokensList" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    </div>
+                </div>
+                <div class="card" style="background: white; border: 2px solid #667eea; margin-top: 15px;">
                     <p style="color: #666; font-size: 0.9em; margin: 0;">
                         <strong>分配规则:</strong> 
                         <span id="userAllocationInfo">加载中...</span>
@@ -1388,14 +1666,6 @@
                     <p style="color: #856404; font-size: 0.9em; margin: 0;">
                         <strong>⚠️ 提醒:</strong> 申请新Token前，必须先完成所有已申请Token的标记操作
                     </p>
-                </div>
-                <div class="card" style="background: white; border: 2px solid #667eea; margin-top: 15px;" id="recentTokensCard">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h4 style="color: #333; margin: 0;">最近申请的Token</h4>
-                        <button class="btn btn-primary" onclick="copyRecentTokens()" style="padding: 5px 15px; font-size: 0.9em;">📋 一键复制</button>
-                    </div>
-                    <div id="recentTokensList" style="display: flex; flex-wrap: wrap; gap: 10px;">
-                    </div>
                 </div>
             </div>
             
@@ -1531,6 +1801,37 @@
                 </div>
             </div>
             
+            <!-- 我的配额标签页 -->
+            <div class="tab-content" id="userQuotaTab">
+                <div class="card">
+                    <h3>📊 我的配额</h3>
+                    <div class="stats-grid" style="margin-bottom: 20px;">
+                        <div class="stat-card">
+                            <h4>我的配额</h4>
+                            <div class="number" id="userQuotaPage">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>已领取</h4>
+                            <div class="number" id="userUsedPage">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>剩余</h4>
+                            <div class="number" id="userRemainingPage">0</div>
+                        </div>
+                    </div>
+                    <div class="card" style="background: white; border: 2px solid #667eea; margin-top: 15px;">
+                        <p style="color: #666; font-size: 0.9em; margin: 0;">
+                            <strong>分配规则:</strong> 
+                            <span id="userAllocationInfoPage">加载中...</span>
+                        </p>
+                        <p style="color: #666; font-size: 0.9em; margin: 5px 0 0 0;">
+                            <strong>领取统计:</strong> 
+                            <span id="userClaimsInfoPage">加载中...</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
             <!-- 个人中心标签页 -->
             <div class="tab-content" id="userProfileTab">
                 <div class="card">
@@ -1580,6 +1881,32 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+    
+    <!-- 手机端底部菜单（放在container外面，确保fixed定位生效） -->
+    <div class="mobile-bottom-nav" id="userMobileNav">
+        <div class="nav-items">
+            <button class="nav-item active" onclick="switchUserTab('apply')">
+                <span class="icon">🏠</span>
+                <span>首页</span>
+            </button>
+            <button class="nav-item" onclick="switchUserTab('quota')">
+                <span class="icon">📊</span>
+                <span>配额</span>
+            </button>
+            <button class="nav-item" onclick="switchUserTab('contribute')">
+                <span class="icon">🐝</span>
+                <span>贡献</span>
+            </button>
+            <button class="nav-item" onclick="switchUserTab('profile')">
+                <span class="icon">👤</span>
+                <span>我的</span>
+            </button>
+            <button class="nav-item" onclick="logout()">
+                <span class="icon">🚪</span>
+                <span>退出</span>
+            </button>
         </div>
     </div>
     
@@ -1793,6 +2120,44 @@
             members: null,
             lastLoadTime: 0
         };
+        
+        // 空闲自动退出配置
+        const IDLE_TIMEOUT = 10 * 60 * 1000; // 10分钟
+        let lastActivityTime = Date.now();
+        let idleCheckInterval = null;
+        
+        // 更新最后活动时间
+        function updateActivityTime() {
+            lastActivityTime = Date.now();
+        }
+        
+        // 启动空闲检测
+        function startIdleCheck() {
+            if (idleCheckInterval) return;
+            
+            // 监听用户活动
+            ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'].forEach(event => {
+                document.addEventListener(event, updateActivityTime, { passive: true });
+            });
+            
+            // 每分钟检查一次
+            idleCheckInterval = setInterval(() => {
+                if (currentUser && Date.now() - lastActivityTime > IDLE_TIMEOUT) {
+                    console.log('⏰ 空闲超过10分钟，自动退出');
+                    logout();
+                }
+            }, 60000);
+            
+            console.log('✅ 空闲检测已启动（10分钟无操作自动退出）');
+        }
+        
+        // 停止空闲检测
+        function stopIdleCheck() {
+            if (idleCheckInterval) {
+                clearInterval(idleCheckInterval);
+                idleCheckInterval = null;
+            }
+        }
         
         // 设置缓存（5分钟有效期）
         let settingsCache = null;
@@ -3796,6 +4161,7 @@
                     
                     if (event === 'SIGNED_OUT') {
                         currentUser = null;
+                        document.getElementById('loadingScreen').style.display = 'none';
                         document.getElementById('loginSection').style.display = 'block';
                         document.getElementById('adminDashboard').style.display = 'none';
                         document.getElementById('userDashboard').style.display = 'none';
@@ -3807,7 +4173,15 @@
                 // 恢复已有 session
                 if (sessionResult.data?.session?.user) {
                     await restoreSession(sessionResult.data.session.user.id);
+                } else {
+                    // 没有 session，隐藏 loading，显示登录界面
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('loginSection').style.display = 'block';
                 }
+            } else {
+                // 没有数据库连接，隐藏 loading，显示登录界面
+                document.getElementById('loadingScreen').style.display = 'none';
+                document.getElementById('loginSection').style.display = 'block';
             }
         });
         
@@ -3824,6 +4198,8 @@
                 
                 if (error || !memberData) {
                     console.log('未找到成员信息');
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('loginSection').style.display = 'block';
                     return;
                 }
                 
@@ -3840,11 +4216,19 @@
                     loginTime: new Date().toISOString()
                 };
                 
+                // 隐藏 loading screen
+                document.getElementById('loadingScreen').style.display = 'none';
+                
+                // 启动空闲检测
+                startIdleCheck();
+                
                 if (memberData.is_admin) {
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('adminDashboard').style.display = 'block';
                     document.getElementById('adminUsername').textContent = memberData.nickname || memberData.username;
                     document.getElementById('adminAvatar').textContent = (memberData.nickname || memberData.username).charAt(0).toUpperCase();
+                    // 管理员不显示底部菜单
+                    document.getElementById('userMobileNav').classList.remove('show');
                     // 懒加载：默认加载第一个标签页数据
                     await loadTokensData();
                 } else {
@@ -3853,6 +4237,8 @@
                     document.getElementById('userDisplayName').textContent = memberData.nickname || memberData.username;
                     document.getElementById('userAvatar').textContent = (memberData.nickname || memberData.username).charAt(0).toUpperCase();
                     document.getElementById('userTeamInfo').textContent = memberData.team || '未分配小队';
+                    // 普通用户显示底部菜单
+                    document.getElementById('userMobileNav').classList.add('show');
                     
                     if (memberData.motto) {
                         document.getElementById('userMotto').textContent = memberData.motto;
@@ -3865,6 +4251,8 @@
                 
             } catch (error) {
                 console.error('恢复会话失败:', error);
+                document.getElementById('loadingScreen').style.display = 'none';
+                document.getElementById('loginSection').style.display = 'block';
             }
         }
         
@@ -4164,6 +4552,16 @@
         }
         
         function openChangePasswordModal() {
+            // 收起展开的菜单（手机端）
+            const adminNavTabs = document.getElementById('adminNavTabs');
+            const adminHamburgerBtn = document.getElementById('adminHamburgerBtn');
+            if (adminNavTabs) {
+                adminNavTabs.classList.remove('expanded');
+            }
+            if (adminHamburgerBtn) {
+                adminHamburgerBtn.classList.remove('hidden');
+            }
+            
             document.getElementById('changePasswordModal').classList.add('active');
             document.getElementById('currentPassword').value = '';
             document.getElementById('newPassword').value = '';
@@ -4213,6 +4611,9 @@
         async function logout() {
             console.log('🚪 开始退出登录...');
             
+            // 停止空闲检测
+            stopIdleCheck();
+            
             // 清除无操作计时器
             if (idleTimeout) {
                 clearTimeout(idleTimeout);
@@ -4240,6 +4641,8 @@
             document.getElementById('loginSection').style.display = 'block';
             document.getElementById('adminDashboard').style.display = 'none';
             document.getElementById('userDashboard').style.display = 'none';
+            // 隐藏底部菜单
+            document.getElementById('userMobileNav').classList.remove('show');
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
             
@@ -4346,6 +4749,19 @@
         
         async function switchTab(user, tab, evt) {
             console.log(`🔄 切换标签页: ${user} -> ${tab}`);
+            
+            // 收起展开的菜单（手机端）
+            if (user === 'admin') {
+                const adminNavTabs = document.getElementById('adminNavTabs');
+                const adminHamburgerBtn = document.getElementById('adminHamburgerBtn');
+                if (adminNavTabs) {
+                    adminNavTabs.classList.remove('expanded');
+                }
+                if (adminHamburgerBtn) {
+                    adminHamburgerBtn.classList.remove('hidden');
+                }
+            }
+            
             const tabs = document.querySelectorAll(`#${user}Dashboard .nav-tab`);
             tabs.forEach(t => t.classList.remove('active'));
             if (evt && evt.target) {
@@ -6753,9 +7169,10 @@
             const member = members.find(m => m.username === currentUser.username);
 
             if (member) {
-                document.getElementById('userQuota').textContent = member.quota || 0;
-                document.getElementById('userUsed').textContent = member.used || 0;
-                document.getElementById('userRemaining').textContent = member.quota - (member.used || 0);
+                // 更新配额页面的数据
+                document.getElementById('userQuotaPage').textContent = member.quota || 0;
+                document.getElementById('userUsedPage').textContent = member.used || 0;
+                document.getElementById('userRemainingPage').textContent = member.quota - (member.used || 0);
             }
 
             const memberAllocation = (allocations.members || {})[currentUser.username] || allocations.global;
@@ -6825,6 +7242,13 @@
                 `每${period === 7 ? '自然周' : period + '天'}可领取${maxClaims}次,每次${memberAllocation.claimAmount || 10}个`;
 
             document.getElementById('userClaimsInfo').textContent =
+                `总申请次数: ${uniqueClaimTimes.length}次 | 本周已领取: ${uniqueWeekClaimTimes.length}次 | 剩余次数: ${Math.max(0, remainingClaims)}次`;
+            
+            // 同时更新配额页面的信息
+            document.getElementById('userAllocationInfoPage').textContent =
+                `每${period === 7 ? '自然周' : period + '天'}可领取${maxClaims}次,每次${memberAllocation.claimAmount || 10}个`;
+
+            document.getElementById('userClaimsInfoPage').textContent =
                 `总申请次数: ${uniqueClaimTimes.length}次 | 本周已领取: ${uniqueWeekClaimTimes.length}次 | 剩余次数: ${Math.max(0, remainingClaims)}次`;
 
             await loadUserTokens();
@@ -7619,10 +8043,97 @@
             showAlert(`已导出 ${filtered.length} 条Token记录`, 'success', 'userAlert');
         }
         
+        // 切换用户导航菜单展开/收起（手机端）
+        function toggleUserNav() {
+            const navTabs = document.getElementById('userNavTabs');
+            const hamburgerBtn = document.getElementById('hamburgerBtn');
+            
+            console.log('🍔 toggleUserNav called');
+            
+            navTabs.classList.toggle('expanded');
+            
+            // 切换汉堡按钮的显示状态
+            if (navTabs.classList.contains('expanded')) {
+                hamburgerBtn.classList.add('hidden');
+            } else {
+                hamburgerBtn.classList.remove('hidden');
+            }
+        }
+        
+        // 切换管理员导航菜单展开/收起（手机端）
+        function toggleAdminNav() {
+            const navTabs = document.getElementById('adminNavTabs');
+            const hamburgerBtn = document.getElementById('adminHamburgerBtn');
+            
+            console.log('🍔 toggleAdminNav called');
+            
+            navTabs.classList.toggle('expanded');
+            
+            // 切换汉堡按钮的显示状态
+            if (navTabs.classList.contains('expanded')) {
+                hamburgerBtn.classList.add('hidden');
+            } else {
+                hamburgerBtn.classList.remove('hidden');
+            }
+        }
+        
+        // 页面加载后绑定事件
+        document.addEventListener('DOMContentLoaded', function() {
+            // 用户汉堡按钮
+            const hamburgerBtn = document.getElementById('hamburgerBtn');
+            if (hamburgerBtn) {
+                console.log('🍔 Binding click event to hamburger button');
+                hamburgerBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🍔 Hamburger button clicked!');
+                    toggleUserNav();
+                });
+            }
+            
+            // 管理员汉堡按钮
+            const adminHamburgerBtn = document.getElementById('adminHamburgerBtn');
+            if (adminHamburgerBtn) {
+                console.log('🍔 Binding click event to admin hamburger button');
+                adminHamburgerBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🍔 Admin hamburger button clicked!');
+                    toggleAdminNav();
+                });
+            }
+        });
+        
         function switchUserTab(tabName) {
+            // 收起展开的菜单
+            const navTabs = document.getElementById('userNavTabs');
+            const hamburgerBtn = document.getElementById('hamburgerBtn');
+            if (navTabs) {
+                navTabs.classList.remove('expanded');
+            }
+            if (hamburgerBtn) {
+                hamburgerBtn.classList.remove('hidden');
+            }
+            
+            // 更新顶部标签页
             const tabs = document.querySelectorAll('#userDashboard .nav-tab');
-            tabs.forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+            tabs.forEach(t => {
+                t.classList.remove('active');
+                // 根据onclick属性匹配
+                if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(`'${tabName}'`)) {
+                    t.classList.add('active');
+                }
+            });
+            
+            // 更新底部菜单
+            const mobileNavItems = document.querySelectorAll('#userMobileNav .nav-item');
+            mobileNavItems.forEach(item => {
+                item.classList.remove('active');
+                const tabAttr = item.getAttribute('onclick');
+                if (tabAttr && tabAttr.includes(`'${tabName}'`)) {
+                    item.classList.add('active');
+                }
+            });
             
             const contents = document.querySelectorAll('#userDashboard .tab-content');
             contents.forEach(c => c.classList.remove('active'));
